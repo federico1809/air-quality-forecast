@@ -1,8 +1,9 @@
-.PHONY: data clean-data
+.PHONY: help data
+
+help:
+	@echo "Available commands:"
+	@echo "  make data    Download and validate raw dataset"
 
 data:
-	python -m src.data.make_dataset
-
-clean-data:
-	rm -rf data/interim/*
-	rm -rf reports/*
+	@echo "[DATA] Starting data acquisition pipeline..."
+	python -m src.data.download_dataset
