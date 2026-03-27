@@ -305,8 +305,8 @@ The project is fully reproducible:
 
 ## 👤 Author
 
-Federico
+Federico Ceballos Torres
 
-Data Scientist
+Data Scientist  
 Background in QA Engineering & Scrum Master
 Focus: production-grade ML systems
