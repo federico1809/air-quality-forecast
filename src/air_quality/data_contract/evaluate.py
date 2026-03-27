@@ -8,6 +8,8 @@ import pandas as pd
 from air_quality.data_contract.aggregation import resolve_system_state
 from air_quality.data_contract.checks.base import OperationalCheck
 
+# Force import of all check modules to populate registry
+import air_quality.data_contract.checks.operational  # noqa
 
 def load_dataset(path: Path) -> pd.DataFrame:
     """
