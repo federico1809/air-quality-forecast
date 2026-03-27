@@ -5,9 +5,13 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "air-quality-forecast"
 version = "0.1.0"
-description = "Air quality forecasting project"
-authors = [{name = "Federico"}]
-dependencies = []
+description = "Air Quality Forecasting and Early Warning System"
+authors = [{name = "Federico Ceballos Torres"}]
+dependencies = [
+    "pandas>=2.0",
+    "numpy>=1.24",
+    "pyarrow>=14.0"
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]
