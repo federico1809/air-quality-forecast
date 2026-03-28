@@ -31,9 +31,9 @@ Deep learning models may be introduced later **only if justified**.
 
 ## 🏗️ System Architecture
 
-The system is intentionally designed as a **hybrid ML system**:
+The system is designed as a **production-oriented ML system**:
 
-Prediction Layer + Decision Layer
+Data Layer → Validation Layer → Feature Layer → Modeling Layer → Decision Layer
 
 Pipeline:
 
@@ -43,34 +43,37 @@ Raw Data (ZIP)
 → Data Contract (Validation Layer)
 → Feature Engineering
 → Modeling
-→ Decision System (Alerts)
+→ Decision System (Alerts - future)
 
 ---
 
 ## 📦 Repository Structure
 
 src/
-air_quality/
-config.py
-data/
-ingest.py
-make_dataset.py
-data_contract/
-models.py
-aggregation.py
-evaluate.py
-checks/
-base.py
-operational.py
+  air_quality/
+    config.py
+    data/
+      ingest.py
+      make_dataset.py
+    data_contract/
+      models.py
+      aggregation.py
+      evaluate.py
+      checks/
+        base.py
+        operational.py
+    features/
+      build_features.py
+    modeling/
+      train_baseline.py
 
 data/
-raw/
-interim/
-processed/
+  raw/
+  interim/
+  processed/
 
 notebooks/
-reports/
-tests/
+  01_EDA.ipynb
 
 ---
 
@@ -87,14 +90,14 @@ MVP Scope:
 
 This project uses a single monitoring station ("Aotizhongxin") for the MVP phase.
 
-While real-world air quality systems are multi-station and spatially complex, this decision is intentional:
+This is intentional:
 
 * Focus on **temporal dynamics and forecasting quality**
 * Reduce complexity for **data validation and system design**
 * Enable **clear interpretability**
 * Prioritize **architecture before scaling**
 
-The system is designed to be **easily extensible to multiple stations**.
+The system is designed to be **extensible to multiple stations**.
 
 ---
 
@@ -113,9 +116,8 @@ Ensures:
 
 ## ⚙️ Environment Setup
 
-Create and activate virtual environment:
+Activate virtual environment (PowerShell):
 
-Windows (PowerShell):
 .venv\Scripts\activate
 
 Install project:
@@ -127,6 +129,7 @@ Dependencies managed via pyproject.toml:
 * pandas
 * numpy
 * pyarrow
+* matplotlib (EDA only)
 
 ---
 
@@ -148,9 +151,9 @@ Output:
 
 data/interim/station_hourly.parquet
 
-* 35,064 rows
+* ~35k rows
 * hourly frequency
-* cleaned datetime
+* clean datetime
 * deduplicated
 
 ---
@@ -165,17 +168,16 @@ data/interim/operational_status.json
 
 ---
 
-## Data Contract System
+## 🛡️ Data Contract System
 
 A **plugin-based validation system** that determines whether the dataset is suitable for forecasting.
 
 ### Key Concepts
 
 * CheckResult
-* CheckSeverity (STRUCTURAL / OPERATIONAL)
+* CheckSeverity (STRUCTURAL / ANALYTICAL / OPERATIONAL)
 * CheckStatus (PASS / WARN / FAIL)
 * SystemState:
-
   * OPERATIONAL
   * DEGRADED_DATA
   * DATA_INSUFFICIENT
@@ -183,9 +185,9 @@ A **plugin-based validation system** that determines whether the dataset is suit
 
 ---
 
-### Current Check
+### Operational Checks
 
-RecentPM25CoverageCheck:
+#### 1. RecentPM25CoverageCheck
 
 * Evaluates PM2.5 coverage over last 24 hours
 * Coverage = non-null values / 24
@@ -196,37 +198,41 @@ Thresholds:
 * 0.5–0.75 → WARN
 * < 0.5 → FAIL
 
+#### 2. MaxMissingStreakCheck
+
+* Evaluates continuity of PM2.5 signal over last 7 days
+* Measures longest consecutive missing streak
+
+Threshold:
+
+* ≤ 12 hours → PASS
+* > 12 hours → FAIL
+
 ---
 
-### Example Output
+### Design Principle
 
-{
-"system_state": "OPERATIONAL",
-"checks": [
-{
-"name": "recent_pm25_coverage",
-"status": "PASS",
-"coverage_last_24h": 1.0
-}
-]
-}
+"No prediction without data validation"
+
+The system **does not assume data is valid**.  
+It evaluates whether forecasting is reliable before allowing predictions.
 
 ---
 
 ## ⚠️ Engineering Challenge Encountered
 
-During development, the system initially returned:
+Initial system output:
 
 {
-"system_state": "OPERATIONAL",
-"checks": []
+  "system_state": "OPERATIONAL",
+  "checks": []
 }
 
 ### Root Cause
 
 The validation system uses a **plugin registry pattern**.
 
-Checks were not being executed because:
+Checks were not executed because:
 
 * Python modules are only registered when imported
 * The check module was never imported in evaluate.py
@@ -240,17 +246,85 @@ import air_quality.data_contract.checks.operational
 
 ### Lesson
 
-This highlights a common issue in Python systems:
+* Dynamic systems can fail silently
+* Plugin architectures require explicit module loading
+* System state can be incorrect without visible errors
 
-* Dynamic registration depends on module loading
-* Silent failures can occur without proper imports
+---
 
-This scenario will be expanded into a **technical LinkedIn post** explaining:
+## 📊 EDA (Decision-Oriented)
 
-* the bug
-* its root cause
-* debugging process
-* production implications
+The EDA focuses on **system reliability**, not just exploration.
+
+Key findings:
+
+* High overall coverage (~97%)
+* Missing data is **not uniformly distributed**
+* Historical long gaps exist (up to ~14 days)
+* Recent data is stable and reliable
+
+Key decision:
+
+* Validation focuses on **recent window (last 7 days)** instead of full history
+
+---
+
+## ⚙️ Feature Engineering
+
+Implemented in:
+
+src/air_quality/features/build_features.py
+
+### Target
+
+PM2.5(t + 24h)
+
+### Features
+
+#### Lags
+
+1, 2, 3, 6, 12, 24, 48, 72
+
+#### Rolling statistics
+
+* rolling_mean: 6h, 12h, 24h
+* rolling_std: 6h, 12h, 24h
+
+#### Time features
+
+* hour
+* day_of_week
+* is_weekend
+
+### Critical design decision
+
+Rolling features use shift(1) to prevent data leakage.
+
+---
+
+## 📦 Feature Dataset
+
+data/processed/features.parquet
+
+* ~26.9k rows
+* 36 columns
+* Fully modeling-ready
+
+---
+
+## 🔀 Train/Test Split
+
+Temporal split (no randomization):
+
+* Train: ~80%
+* Test: ~20%
+
+Example:
+
+* Train: 2013 → 2016
+* Test: 2016 → 2017
+
+This simulates real production usage.
 
 ---
 
@@ -261,25 +335,17 @@ Completed:
 * Data ingestion
 * Data normalization
 * Data contract system
-* End-to-end execution
+* EDA (decision-oriented)
+* Feature engineering pipeline
+* Modeling dataset generation
+* Temporal train/test split
 
 Next:
 
-* EDA (decision-oriented)
-* Feature engineering
-* Modeling
+* Baseline modeling (Linear Regression)
+* Model evaluation (RMSE, MAE)
 * Decision layer (alerts)
-
----
-
-## Reproducibility
-
-The project is fully reproducible:
-
-* Defined dependencies
-* Deterministic dataset validation
-* Modular pipeline
-* CLI-based execution
+* Probabilistic forecasting
 
 ---
 
@@ -288,18 +354,19 @@ The project is fully reproducible:
 * Reproducibility first
 * Separation of concerns
 * Decision-driven ML
-* Production-oriented thinking
-* Explicit over implicit behavior
+* Production-oriented design
+* Explicit behavior over implicit assumptions
+* Validation before prediction
 
 ---
 
 ## 🚀 Future Work
 
-* Probabilistic forecasting models
-* Feature engineering pipeline
-* Alert threshold system (WHO-based)
+* Probabilistic forecasting
+* Alert system (WHO thresholds)
 * Multi-station scaling
 * Drift detection and retraining
+* Inference pipeline
 
 ---
 
@@ -308,5 +375,3 @@ The project is fully reproducible:
 Federico Ceballos Torres
 
 Data Scientist  
-Background in QA Engineering & Scrum Master
-Focus: production-grade ML systems
