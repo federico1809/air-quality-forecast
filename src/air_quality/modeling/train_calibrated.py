@@ -21,12 +21,28 @@ from sklearn.preprocessing import StandardScaler
 TARGET_THRESHOLD = 35.0
 
 
+# -------------------------
+# Risk level assignment (Decision Layer)
+# -------------------------
+def assign_risk_level(proba):
+    if proba >= 0.7:
+        return "high"
+    elif proba >= 0.5:
+        return "medium"
+    elif proba >= 0.3:
+        return "low"
+    else:
+        return "safe"
+
+
+# -------------------------
+# Threshold evaluation
+# -------------------------
 def evaluate_thresholds(y_true, y_proba, thresholds):
     results = []
 
     for t in thresholds:
         y_pred = (y_proba >= t).astype(int)
-
         tn, fp, fn, tp = confusion_matrix(y_true, y_pred).ravel()
 
         results.append({
@@ -45,6 +61,24 @@ def evaluate_thresholds(y_true, y_proba, thresholds):
     return pd.DataFrame(results)
 
 
+# -------------------------
+# Jump analysis
+# -------------------------
+def analyze_threshold_jumps(df):
+    df = df.sort_values("threshold").copy()
+
+    df["delta_fn"] = df["false_negatives"].diff()
+    df["delta_fp"] = df["false_positives"].diff()
+    df["delta_alert_rate"] = df["alert_rate"].diff()
+
+    df["jump_score"] = (
+        df["delta_fn"].abs() * 20 +
+        df["delta_alert_rate"].abs() * 1000
+    )
+
+    return df
+
+
 def main():
     # -------------------------
     # Load data
@@ -61,14 +95,8 @@ def main():
     # Features
     # -------------------------
     EXCLUDED_COLUMNS = [
-        "No",
-        "year",
-        "month",
-        "day",
-        "datetime",
-        "station",
-        "target",
-        "wd",
+        "No", "year", "month", "day",
+        "datetime", "station", "target", "wd",
     ]
 
     X = df.drop(columns=EXCLUDED_COLUMNS)
@@ -90,8 +118,7 @@ def main():
     # -------------------------
     # Train / Calibration split
     # -------------------------
-    calibration_fraction = 0.2
-    split_index = int(len(X_train_full) * (1 - calibration_fraction))
+    split_index = int(len(X_train_full) * 0.8)
 
     X_train = X_train_full.iloc[:split_index]
     y_train = y_train_full.iloc[:split_index]
@@ -113,18 +140,15 @@ def main():
     print("Test size:", X_test.shape)
 
     # -------------------------
-    # Train base model
+    # Base model
     # -------------------------
     base_model = LogisticRegression(max_iter=2000)
     base_model.fit(X_train_scaled, y_train)
 
-    # -------------------------
-    # Freeze model
-    # -------------------------
     frozen_model = FrozenEstimator(base_model)
 
     # -------------------------
-    # Calibrated models
+    # Calibration
     # -------------------------
     platt_model = CalibratedClassifierCV(
         estimator=frozen_model,
@@ -146,6 +170,28 @@ def main():
     y_proba_base = base_model.predict_proba(X_test_scaled)[:, 1]
     y_proba_platt = platt_model.predict_proba(X_test_scaled)[:, 1]
     y_proba_isotonic = isotonic_model.predict_proba(X_test_scaled)[:, 1]
+
+    # -------------------------
+    # Decision Layer (multi-threshold)
+    # -------------------------
+    risk_levels = pd.Series(y_proba_platt).apply(assign_risk_level)
+
+    # -------------------------
+    # Save predictions
+    # -------------------------
+    os.makedirs("data/metrics", exist_ok=True)
+
+    predictions_df = pd.DataFrame({
+        "datetime": df.loc[test_mask, "datetime"].values,
+        "y_true": y_test.values,
+        "y_proba": y_proba_platt,
+        "risk_level": risk_levels.values
+    })
+
+    predictions_df.to_csv("data/metrics/predictions_with_risk_levels.csv", index=False)
+
+    print("\nSaved:")
+    print("- data/metrics/predictions_with_risk_levels.csv")
 
     # -------------------------
     # Calibration evaluation
@@ -172,27 +218,22 @@ def main():
     print(results_df)
 
     # -------------------------
-    # Threshold analysis (ISOTONIC)
+    # Threshold analysis (PLATT)
     # -------------------------
     thresholds = [0.3, 0.4, 0.5, 0.6, 0.7]
 
-    threshold_df = evaluate_thresholds(
-        y_test,
-        y_proba_platt,
-        thresholds
-    )
+    threshold_df = evaluate_thresholds(y_test, y_proba_platt, thresholds)
     jump_df = analyze_threshold_jumps(threshold_df)
 
     print("\n=== THRESHOLD JUMP ANALYSIS ===")
     print(jump_df)
+
     print("\n=== THRESHOLD ANALYSIS (PLATT) ===")
     print(threshold_df)
 
     # -------------------------
     # Save metrics
     # -------------------------
-    os.makedirs("data/metrics", exist_ok=True)
-
     results_df.to_csv("data/metrics/calibration_results.csv", index=False)
     threshold_df.to_csv("data/metrics/threshold_analysis_calibrated.csv", index=False)
 
@@ -200,20 +241,6 @@ def main():
     print("- data/metrics/calibration_results.csv")
     print("- data/metrics/threshold_analysis_calibrated.csv")
 
-def analyze_threshold_jumps(df):
-    df = df.sort_values("threshold").copy()
-
-    df["delta_fn"] = df["false_negatives"].diff()
-    df["delta_fp"] = df["false_positives"].diff()
-    df["delta_alert_rate"] = df["alert_rate"].diff()
-
-    # magnitud del cambio (puede ajustarse)
-    df["jump_score"] = (
-        df["delta_fn"].abs() * 20 +  # peso sanitario
-        df["delta_alert_rate"].abs() * 1000  # escala operativa
-    )
-
-    return df
 
 if __name__ == "__main__":
     main()
