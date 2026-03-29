@@ -14,6 +14,10 @@ data/processed/*
 !data/interim/.gitkeep
 !data/processed/.gitkeep
 
+# Metrics (keep outputs for analysis)
+!data/metrics/
+!data/metrics/*
+
 # Reports
 reports/*
 !reports/.gitkeep

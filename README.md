@@ -43,37 +43,38 @@ Raw Data (ZIP)
 → Data Contract (Validation Layer)
 → Feature Engineering
 → Modeling
-→ Decision System (Alerts - future)
+→ Decision System (Alerts)
 
 ---
 
 ## 📦 Repository Structure
 
 src/
-  air_quality/
-    config.py
-    data/
-      ingest.py
-      make_dataset.py
-    data_contract/
-      models.py
-      aggregation.py
-      evaluate.py
-      checks/
-        base.py
-        operational.py
-    features/
-      build_features.py
-    modeling/
-      train_baseline.py
+air_quality/
+config.py
+data/
+ingest.py
+make_dataset.py
+data_contract/
+models.py
+aggregation.py
+evaluate.py
+checks/
+base.py
+operational.py
+features/
+build_features.py
+modeling/
+train_baseline.py
 
 data/
-  raw/
-  interim/
-  processed/
+raw/
+interim/
+processed/
+metrics/
 
 notebooks/
-  01_EDA.ipynb
+01_EDA.ipynb
 
 ---
 
@@ -130,6 +131,7 @@ Dependencies managed via pyproject.toml:
 * numpy
 * pyarrow
 * matplotlib (EDA only)
+* scikit-learn
 
 ---
 
@@ -178,6 +180,7 @@ A **plugin-based validation system** that determines whether the dataset is suit
 * CheckSeverity (STRUCTURAL / ANALYTICAL / OPERATIONAL)
 * CheckStatus (PASS / WARN / FAIL)
 * SystemState:
+
   * OPERATIONAL
   * DEGRADED_DATA
   * DATA_INSUFFICIENT
@@ -214,7 +217,7 @@ Threshold:
 
 "No prediction without data validation"
 
-The system **does not assume data is valid**.  
+The system **does not assume data is valid**.
 It evaluates whether forecasting is reliable before allowing predictions.
 
 ---
@@ -224,8 +227,8 @@ It evaluates whether forecasting is reliable before allowing predictions.
 Initial system output:
 
 {
-  "system_state": "OPERATIONAL",
-  "checks": []
+"system_state": "OPERATIONAL",
+"checks": []
 }
 
 ### Root Cause
@@ -328,6 +331,74 @@ This simulates real production usage.
 
 ---
 
+## 🤖 Modeling Approach
+
+The problem is formulated as a **binary classification task**:
+
+* Positive class: **PM2.5 ≥ 35 µg/m³ (unhealthy)**
+* Negative class: **PM2.5 < 35 µg/m³**
+
+Model:
+
+* Logistic Regression (baseline)
+* StandardScaler for feature normalization
+
+This formulation aligns the model with **operational decision-making**, not just prediction accuracy.
+
+---
+
+## 📊 Model Performance (Baseline)
+
+At default threshold (0.5):
+
+* Accuracy: 0.6598
+* Precision: 0.6682
+* Recall: 0.9174
+* F1 Score: 0.7733
+* ROC AUC: 0.6496
+* PR AUC: 0.7409
+
+The model significantly outperforms a naive baseline based on lagged PM2.5.
+
+---
+
+## 🚨 Decision Layer (Operational Threshold)
+
+The system uses predicted probabilities to trigger alerts.
+
+### Threshold Selection
+
+Evaluated thresholds:
+
+0.3, 0.4, 0.5, 0.6, 0.7
+
+Final decision:
+
+**Decision threshold = 0.4**
+
+### Rationale
+
+At threshold 0.4:
+
+* Recall: 0.983 → captures ~98% of unhealthy events
+* False Negatives: 57 (vs 281 at threshold 0.5)
+* Significant reduction in missed hazardous events
+* Alert rate: ~95% (high but acceptable for a conservative system)
+
+### Operational Trade-off
+
+The system is intentionally **risk-averse**:
+
+* Prioritizes **minimizing false negatives**
+* Accepts a **high number of alerts**
+* Designed for **early warning in public health contexts**
+
+### Design Principle
+
+> It is preferable to over-alert than to miss hazardous air quality events.
+
+---
+
 ## 📍 Current Project Status
 
 Completed:
@@ -339,13 +410,8 @@ Completed:
 * Feature engineering pipeline
 * Modeling dataset generation
 * Temporal train/test split
-
-Next:
-
-* Baseline modeling (Linear Regression)
-* Model evaluation (RMSE, MAE)
-* Decision layer (alerts)
-* Probabilistic forecasting
+* Binary baseline model
+* Operational threshold definition
 
 ---
 
@@ -362,8 +428,8 @@ Next:
 
 ## 🚀 Future Work
 
-* Probabilistic forecasting
-* Alert system (WHO thresholds)
+* Probability calibration (Platt / isotonic)
+* Multi-level alert system (WHO thresholds)
 * Multi-station scaling
 * Drift detection and retraining
 * Inference pipeline
@@ -374,4 +440,4 @@ Next:
 
 Federico Ceballos Torres
 
-Data Scientist  
+Data Scientist
