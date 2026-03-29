@@ -410,8 +410,68 @@ Completed:
 * Feature engineering pipeline
 * Modeling dataset generation
 * Temporal train/test split
-* Binary baseline model
-* Operational threshold definition
+* Binary classification baseline (Logistic Regression)
+* Probabilistic calibration (Platt scaling)
+* Threshold analysis and decision boundary evaluation
+
+---
+
+## 🧠 Decision Layer (Operational Threshold)
+
+The model outputs calibrated probabilities of unhealthy air quality (PM2.5 ≥ 35 µg/m³).
+
+A decision threshold was selected using a combination of:
+
+* Threshold-based performance metrics (precision, recall, FN, FP)
+* Operational trade-off analysis (alert rate vs missed events)
+* Structural "jump analysis" of system behavior across thresholds
+
+### Final Decision
+
+Threshold = **0.5**
+
+### Rationale
+
+Threshold 0.5 was selected as the first **operationally meaningful inflection point** in system behavior.
+
+From the jump analysis:
+
+* Transition from 0.4 → 0.5:
+  * False negatives increase moderately (+130)
+  * Alert rate drops significantly (~5%)
+  * First clear shift away from "always alerting"
+
+* Transition from 0.5 → 0.6:
+  * False negatives increase drastically (+1113)
+  * System begins missing a large number of dangerous events
+
+This indicates that:
+
+* Thresholds below 0.5 result in near-constant alerting (alert_rate ~ 0.99)
+* Thresholds above 0.5 degrade system safety significantly
+
+Therefore, 0.5 represents the best trade-off between:
+
+* Maintaining high recall (~0.95)
+* Reducing alert saturation
+* Preserving operational usability
+
+---
+
+## 📍 Current System Behavior
+
+* High recall (~0.95)
+* Moderate precision (~0.64)
+* High but controlled alert rate (~0.93)
+* Strong bias toward minimizing false negatives
+
+---
+
+Next:
+
+* Cost-sensitive optimization refinement
+* Multi-level alert system (future iteration)
+* Visualization layer (Tableau / Power BI)
 
 ---
 
