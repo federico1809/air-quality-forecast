@@ -14,9 +14,9 @@ data/processed/*
 !data/interim/.gitkeep
 !data/processed/.gitkeep
 
-# Metrics (keep outputs for analysis)
+# Metrics (versioned outputs)
 !data/metrics/
-!data/metrics/*
+!data/metrics/*.csv
 
 # Reports
 reports/*
